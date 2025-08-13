@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Fi Chat Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Customer messages on the left */
+        .chat-message.customer {
+            justify-content: flex-start;
+        }
+        /* Agent messages on the right */
+        .chat-message.agent {
+            justify-content: flex-end;
+        }
+        .message-box.customer {
+            background-color: #e5e7eb;
+            color: #1f2937;
+        }
+        .message-box.agent {
+            background-color: #dbeafe;
+            color: #1f2937;
+        }
+        .chat-container {
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .message-box {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            padding: 0.75rem 1rem;
+            max-width: 75%;
+            word-wrap: break-word;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        #loading-indicator {
+            display: none;
+            padding: 1rem;
+            text-align: center;
+            font-style: italic;
+            color: #6b7280;
+        }
+        .feedback-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .feedback-modal {
+            width: 90%;
+            max-width: 500px;
+            background-color: white;
+            border-radius: 1.5rem;
+            padding: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            max-height: 80%;
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="chat-container bg-white w-full max-w-3xl">
+        <!-- Header with persona, issue, and solution selectors -->
+        <div class="p-4 bg-gray-900 text-white rounded-t-2xl">
+            <h1 class="text-center font-bold text-2xl mb-4">Google Fi Chat Simulator</h1>
+            <div class="flex flex-col sm:flex-row justify-around items-center space-y-3 sm:space-y-0">
+                <div class="flex flex-col w-full sm:w-1/4">
+                    <label for="role-select" class="text-sm font-semibold mb-1">Select Your Role:</label>
+                    <select id="role-select" class="p-2 rounded-lg text-gray-900 bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="Agent">Agent</option>
+                        <option value="Customer">Customer</option>
+                    </select>
+                </div>
+                <div class="flex flex-col w-full sm:w-1/4">
+                    <label for="persona-select" class="text-sm font-semibold mb-1">Select Persona:</label>
+                    <select id="persona-select" class="p-2 rounded-lg text-gray-900 bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="Neutral">Neutral</option>
+                        <option value="Upset">Upset</option>
+                        <option value="Disappointed">Disappointed</option>
+                        <option value="Sarcastic">Sarcastic</option>
+                        <option value="Bothered">Bothered</option>
+                        <option value="Unhappy">Unhappy</option>
+                    </select>
+                </div>
+                <div class="flex flex-col w-full sm:w-1/4">
+                    <label for="issue-select" class="text-sm font-semibold mb-1">Select Issue:</label>
+                    <select id="issue-select" class="p-2 rounded-lg text-gray-900 bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="Billing Inquiry">Billing Inquiry</option>
+                        <option value="Can't Connect to the Network">Can't Connect to the Network</option>
+                        <option value="File Device Protection Claim">File Device Protection Claim</option>
+                        <option value="Switch Device / Transfer Service">Switch Device / Transfer Service</option>
+                        <option value="Activation Issue">Activation Issue</option>
+                    </select>
+                </div>
+                <div class="flex flex-col w-full sm:w-1/4">
+                    <label for="solution-select" class="text-sm font-semibold mb-1">Select Solution:</label>
+                    <select id="solution-select" class="p-2 rounded-lg text-gray-900 bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Select a solution...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat messages display area -->
+        <div id="chat-messages" class="chat-messages">
+            <div class="chat-message agent flex items-center">
+                <div class="message-box agent">
+                    Hello! I am a simple chat simulator for Google Fi. Please select a role, persona, and issue, and click "Start" to begin.
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading indicator -->
+        <div id="loading-indicator">
+            <div class="flex items-center justify-center space-x-2">
+                <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-150"></div>
+                <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-300"></div>
+            </div>
+        </div>
+        
+        <!-- Input area -->
+        <div class="p-4 border-t border-gray-200">
+            <div class="flex space-x-2 mb-2">
+                <button id="start-button" class="bg-green-600 text-white p-3 rounded-xl font-bold hover:bg-green-700 transition duration-300 w-1/3 shadow-md">
+                    Start
+                </button>
+                <button id="end-button" class="bg-yellow-500 text-white p-3 rounded-xl font-bold hover:bg-yellow-600 transition duration-300 w-1/3 shadow-md" disabled>
+                    End
+                </button>
+                <button id="clear-button" class="bg-red-600 text-white p-3 rounded-xl font-bold hover:bg-red-700 transition duration-300 w-1/3 shadow-md">
+                    Clear
+                </button>
+            </div>
+            <div class="flex space-x-2">
+                <textarea id="user-input" placeholder="Type an agent message..." class="flex-1 p-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 resize-none shadow-inner" rows="2" disabled></textarea>
+                <button id="send-button" class="bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition duration-300 shadow-md" disabled>
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Modal -->
+    <div id="feedback-modal-overlay" class="feedback-modal-overlay">
+        <div class="feedback-modal">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-gray-900">Agent Feedback</h2>
+                <button id="close-feedback" class="text-gray-500 hover:text-gray-800 transition-colors">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div id="feedback-content" class="text-gray-700 overflow-y-auto flex-1 p-2">
+                <!-- Feedback will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Message Box for Errors/Info -->
+    <div id="custom-message-box" class="fixed top-4 right-4 bg-red-600 text-white p-4 rounded-lg shadow-xl hidden transition-all duration-300">
+        <p id="message-content"></p>
+    </div>
+
+    <script>
+        // DOM elements
+        const chatMessages = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const startButton = document.getElementById('start-button');
+        const endButton = document.getElementById('end-button');
+        const clearButton = document.getElementById('clear-button');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const roleSelect = document.getElementById('role-select');
+        const personaSelect = document.getElementById('persona-select');
+        const issueSelect = document.getElementById('issue-select');
+        const solutionSelect = document.getElementById('solution-select');
+        const feedbackModalOverlay = document.getElementById('feedback-modal-overlay');
+        const feedbackContent = document.getElementById('feedback-content');
+        const closeFeedbackButton = document.getElementById('close-feedback');
+        const customMessageBox = document.getElementById('custom-message-box');
+        const messageContent = document.getElementById('message-content');
+
+        let chatHistory = [];
+        let conversationStarted = false;
+        let inactivityTimer = null;
+
+        // Solution options based on issue
+        const solutionOptions = {
+            'Billing Inquiry': ['Explained billing statement', 'Applied credit for overcharge', 'Corrected billing error', 'Set up payment plan'],
+            'Can\'t Connect to the Network': ['Provided troubleshooting steps', 'Reset network settings remotely', 'Escalated to technical support', 'Confirmed outage in area'],
+            'File Device Protection Claim': ['Provided claim instructions', 'Started claim process', 'Answered claim-related questions', 'Escalated to device protection team'],
+            'Switch Device / Transfer Service': ['Provided steps for device transfer', 'Assisted with SIM card activation', 'Escalated activation issue', 'Answered service plan questions'],
+            'Activation Issue': ['Provided troubleshooting steps', 'Escalated activation issue', 'Confirmed plan status', 'Assisted with eSIM setup']
+        };
+
+        // Function to display a temporary message to the user
+        function showMessage(text, isError = false) {
+            messageContent.textContent = text;
+            customMessageBox.classList.toggle('bg-red-600', isError);
+            customMessageBox.classList.toggle('bg-blue-500', !isError);
+            customMessageBox.classList.remove('hidden');
+            setTimeout(() => {
+                customMessageBox.classList.add('hidden');
+            }, 3000);
+        }
+
+        // Function to append a message to the chat display
+        function addMessage(text, sender) {
+            const messageWrapper = document.createElement('div');
+            messageWrapper.className = `chat-message flex items-center ${sender}`;
+
+            const messageBox = document.createElement('div');
+            messageBox.className = `message-box ${sender}`;
+            messageBox.textContent = text;
+            
+            messageWrapper.appendChild(messageBox);
+            chatMessages.appendChild(messageWrapper);
+            
+            // Scroll to the bottom of the chat window
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // --- Inactivity Timer Functions ---
+        const INACTIVITY_TIMEOUT_MS = 60000; // 1 minute
+        
+        function clearInactivityTimer() {
+            if (inactivityTimer) {
+                clearTimeout(inactivityTimer);
+                inactivityTimer = null;
+            }
+        }
+
+        function startInactivityTimer() {
+            clearInactivityTimer();
+            inactivityTimer = setTimeout(() => {
+                handleInactivity();
+            }, INACTIVITY_TIMEOUT_MS);
+        }
+
+        function handleInactivity() {
+            // Add a message indicating the customer left
+            addMessage("The customer has left the chat due to inactivity.", 'customer');
+            chatHistory.push({ role: "user", parts: [{ text: "The customer has left the chat due to inactivity." }] });
+            
+            // Call the end conversation function
+            endConversation();
+        }
+        // --- End Inactivity Timer Functions ---
+
+        // Exponential backoff retry function for API calls
+        async function fetchWithBackoff(url, options, retries = 5, delay = 1000) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                if (retries > 0) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return fetchWithBackoff(url, options, retries - 1, delay * 2);
+                } else {
+                    throw error;
+                }
+            }
+        }
+        
+        // Function to get a response from the simulated opponent (customer or agent)
+        async function getSimulatedOpponentResponse(opponentRole) {
+            loadingIndicator.style.display = 'block';
+            userInput.disabled = true;
+            sendButton.disabled = true;
+            clearInactivityTimer();
+
+            const persona = personaSelect.value;
+            const issue = issueSelect.value;
+            let prompt;
+
+            if (opponentRole === 'Customer') {
+                prompt = `You are a customer with the persona of "${persona}" and the issue of "${issue}". Respond to the agent's last message.`;
+            } else { // opponentRole is 'Agent'
+                prompt = `You are a Google Fi customer service agent. The customer's issue is "${issue}" and their persona is "${persona}". Respond to the customer's last message. Be professional and helpful.`;
+            }
+
+            // Append the new prompt to the chat history for the AI
+            const historyWithPrompt = [...chatHistory, { role: "user", parts: [{ text: prompt }] }];
+            const payload = { contents: historyWithPrompt };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            try {
+                const result = await fetchWithBackoff(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    chatHistory.push({ role: opponentRole === 'Customer' ? 'user' : 'model', parts: [{ text: text }] });
+                    addMessage(text, opponentRole.toLowerCase());
+                    startInactivityTimer();
+                } else {
+                    addMessage("Sorry, I couldn't generate a response.", opponentRole.toLowerCase());
+                }
+            } catch (error) {
+                console.error("API call failed:", error);
+                showMessage("An error occurred while getting a response.", true);
+                addMessage("An error occurred while getting a response.", opponentRole.toLowerCase());
+            } finally {
+                loadingIndicator.style.display = 'none';
+                userInput.disabled = false;
+                sendButton.disabled = false;
+                userInput.focus();
+            }
+        }
+        
+        // Function to generate the initial customer prompt based on selections
+        function generateInitialCustomerPrompt(persona, issue) {
+            let basePrompt;
+            switch(issue) {
+                case 'Billing Inquiry':
+                    basePrompt = "I would like to know why my bill is so high.";
+                    break;
+                case "Can't Connect to the Network":
+                    basePrompt = "My services are not working. Can you please assist?";
+                    break;
+                case 'File Device Protection Claim':
+                    basePrompt = "I need to file a device protection claim.";
+                    break;
+                case 'Switch Device / Transfer Service':
+                    basePrompt = "I'm trying to switch my device and need some help.";
+                    break;
+                case 'Activation Issue':
+                    basePrompt = "I'm having trouble activating my phone.";
+                    break;
+                default:
+                    basePrompt = "I have a question about my Google Fi service.";
+            }
+
+            let finalPrompt = basePrompt;
+            switch(persona) {
+                case 'Upset':
+                    finalPrompt = `I'm upset about something. ${basePrompt.replace('.', '')} right now!`;
+                    break;
+                case 'Disappointed':
+                    finalPrompt = `I'm really disappointed with my service. ${basePrompt}`;
+                    break;
+                case 'Sarcastic':
+                    finalPrompt = `Oh, great. ${basePrompt.replace('.', '')} It's working so well.`;
+                    break;
+                case 'Bothered':
+                    finalPrompt = `I'm busy and bothered. ${basePrompt}`;
+                    break;
+                case 'Unhappy':
+                    finalPrompt = `I'm not happy with my service. ${basePrompt}`;
+                    break;
+            }
+            return finalPrompt;
+        }
+        
+        // Function to start the conversation
+        async function startConversation() {
+            // Clear previous chat history and messages
+            chatMessages.innerHTML = '';
+            chatHistory = [];
+            conversationStarted = true;
+            
+            // Disable start and enable end/input/send buttons
+            startButton.disabled = true;
+            endButton.disabled = false;
+            userInput.disabled = false;
+            sendButton.disabled = false;
+            roleSelect.disabled = true;
+            personaSelect.disabled = true;
+            issueSelect.disabled = true;
+            userInput.focus();
+            
+            // Determine roles
+            const userRole = roleSelect.value;
+            
+            if (userRole === 'Agent') {
+                // Agent is the user, so the simulated customer starts the chat
+                const customerPrompt = generateInitialCustomerPrompt(personaSelect.value, issueSelect.value);
+                addMessage(customerPrompt, 'customer');
+                chatHistory.push({ role: "user", parts: [{ text: customerPrompt }] });
+            } else {
+                // Customer is the user, so the simulated agent starts the chat
+                const agentWelcome = "Hello! I'm a customer service agent for Google Fi. How may I help you today?";
+                addMessage(agentWelcome, 'agent');
+                chatHistory.push({ role: "model", parts: [{ text: agentWelcome }] });
+            }
+            
+            startInactivityTimer();
+        }
+
+        // Event handler for sending a message
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (message === '' || !conversationStarted) {
+                return;
+            }
+            
+            const userRole = roleSelect.value;
+            const opponentRole = userRole === 'Agent' ? 'Customer' : 'Agent';
+            
+            // Add user's message to the chat display and history
+            const senderClass = userRole.toLowerCase();
+            const historyRole = userRole === 'Agent' ? 'model' : 'user';
+            
+            addMessage(message, senderClass);
+            chatHistory.push({ role: historyRole, parts: [{ text: message }] });
+            userInput.value = '';
+
+            // Get a response from the simulated opponent
+            await getSimulatedOpponentResponse(opponentRole);
+        }
+        
+        // Function to end the conversation and get feedback
+        async function endConversation() {
+            if (!conversationStarted) {
+                showMessage("The conversation has not started.", false);
+                return;
+            }
+            
+            loadingIndicator.style.display = 'block';
+            endButton.disabled = true;
+            userInput.disabled = true;
+            sendButton.disabled = true;
+            clearInactivityTimer();
+
+            const persona = personaSelect.value;
+            const issue = issueSelect.value;
+            let solution = solutionSelect.value;
+            
+            // If the chat ended due to inactivity, set a default solution
+            if (solution === '') {
+                solution = "Chat ended due to agent inactivity.";
+            }
+
+            const feedbackPrompt = `Analyze the following chat transcript. The agent's messages are labeled "model" and the customer's messages are "user". Provide constructive feedback for the agent on their performance, focusing on tone, problem-solving, and professionalism. The customer's issue was "${issue}" and the persona was "${persona}". The conversation was ended with the solution: "${solution}".`;
+
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: feedbackPrompt }] }, ...chatHistory]
+            };
+
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            try {
+                const result = await fetchWithBackoff(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    feedbackContent.innerHTML = text.replace(/\n/g, '<br>');
+                    feedbackModalOverlay.style.display = 'flex';
+                } else {
+                    feedbackContent.textContent = "Sorry, I couldn't generate feedback.";
+                    feedbackModalOverlay.style.display = 'flex';
+                }
+            } catch (error) {
+                console.error("API call failed:", error);
+                feedbackContent.textContent = "An error occurred while getting feedback.";
+                feedbackModalOverlay.style.display = 'flex';
+            } finally {
+                loadingIndicator.style.display = 'none';
+            }
+        }
+
+        // Function to clear the chat and reset the state
+        function clearChat() {
+            chatMessages.innerHTML = '';
+            chatHistory = [];
+            conversationStarted = false;
+            userInput.value = '';
+            
+            startButton.disabled = false;
+            endButton.disabled = true;
+            userInput.disabled = true;
+            sendButton.disabled = true;
+            roleSelect.disabled = false;
+            personaSelect.disabled = false;
+            issueSelect.disabled = false;
+            solutionSelect.value = '';
+            
+            feedbackModalOverlay.style.display = 'none';
+            clearInactivityTimer();
+            
+            // Add the initial welcome message back
+            addMessage("Hello! I am a simple chat simulator for Google Fi. Please select a role, persona, and issue, and click \"Start\" to begin.", 'agent');
+        }
+
+        // Function to populate the solution dropdown based on the selected issue
+        function populateSolutionDropdown() {
+            const issue = issueSelect.value;
+            solutionSelect.innerHTML = '<option value="">Select a solution...</option>';
+            if (solutionOptions[issue]) {
+                solutionOptions[issue].forEach(solution => {
+                    const option = document.createElement('option');
+                    option.value = solution;
+                    option.textContent = solution;
+                    solutionSelect.appendChild(option);
+                });
+            }
+        }
+        
+        // Function to update the input placeholder based on the selected role
+        function updateInputPlaceholder() {
+            const role = roleSelect.value;
+            if (role === 'Agent') {
+                userInput.placeholder = "Type an agent message...";
+            } else {
+                userInput.placeholder = "Type a customer message...";
+            }
+        }
+
+        // Event listeners
+        startButton.addEventListener('click', startConversation);
+        clearButton.addEventListener('click', clearChat);
+        endButton.addEventListener('click', endConversation);
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keydown', function(event) {
+            // Check for Enter key without Shift
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (!sendButton.disabled) {
+                    sendMessage();
+                }
+            }
+        });
+        closeFeedbackButton.addEventListener('click', () => {
+            feedbackModalOverlay.style.display = 'none';
+        });
+        issueSelect.addEventListener('change', populateSolutionDropdown);
+        roleSelect.addEventListener('change', updateInputPlaceholder);
+        
+        // Initial setup
+        document.addEventListener('DOMContentLoaded', () => {
+            populateSolutionDropdown();
+            updateInputPlaceholder();
+        });
+    </script>
+</body>
+</html>
